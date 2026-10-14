@@ -4,7 +4,8 @@
     "nombre": "Cepillo de Dientes de Bambú Biodegradable",
     "precio": 4.99,
     "stock": 150,
-    "categoria": "Cuidado Personal",
+    "categoria": "Higiene personal",
+    "admite_devolucion": false,
     "descripcion": "Cepillo con cerdas de fibra de bambú 100% compostable."
   },
   {
@@ -13,6 +14,7 @@
     "precio": 12.50,
     "stock": 45,
     "categoria": "Hogar",
+    "admite_devolucion": true,
     "descripcion": "Detergente biodegradable libre de fosfatos y sulfatos."
   },
   {
@@ -21,6 +23,7 @@
     "precio": 22.00,
     "stock": 80,
     "categoria": "Accesorios",
+    "admite_devolucion": true,
     "descripcion": "Mantiene bebidas frías por 24 horas y calientes por 12 horas."
   }
 ]

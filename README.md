@@ -4,91 +4,166 @@
 **Integrantes:**
 - Deibi Bastidas Cerón.
 - Camilo Arciniegas Forero.
+
+Este taller es la evolución del [Taller 1 (ecomarket-ai-taller1)](https://github.com/ccar9636-crypto/ecomarket-ai-taller1): se reutiliza el LLM de **Groq (Llama 3)**, la base de pedidos `mock_orders.json` y las reglas de devolución, y se les incorpora una capa de recuperación (RAG) para que el modelo responda solo con información verificable de EcoMarket.
+
+---
+
+## Flujo del Sistema RAG
+
+```text
+Documentos (docs/) -> Chunking -> Embedding multilingüe -> ChromaDB      (Indexación, una sola vez)
+
+Pregunta del cliente -> Embedding -> ChromaDB (top-k fragmentos)
+                     -> Prompt aumentado (rol + reglas + contexto + pregunta)
+                     -> LLM Groq (Llama 3) -> Respuesta                  (Consulta, cada vez)
+```
+
+1. **Indexación:** los documentos se cargan, se segmentan en chunks, cada chunk se convierte en un vector con `intfloat/multilingual-e5-large` y se almacena en ChromaDB.
+2. **Recuperación (Retrieval):** la pregunta del cliente se convierte en vector con el mismo modelo y ChromaDB devuelve los `k` fragmentos más cercanos.
+3. **Generación (Chaining):** los fragmentos se insertan en un prompt que obliga al LLM a responder **únicamente con el contexto recuperado**. Si el contexto no alcanza, debe responder exactamente: `No tengo esa información.`
+
+El modelo de embeddings **busca**; el LLM **redacta**. Son componentes distintos conectados por el prompt.
+
 ---
 
 ## Fase 1: Selección de Componentes Clave del Sistema RAG
 
 ### 1. Modelo de Embeddings
-**Selección:** `text-embedding-3-small` (OpenAI) / Alternativa Open-Source: `intfloat/multilingual-e5-base` (HuggingFace) o `FastEmbed`.
+**Selección:** `intfloat/multilingual-e5-large` (código abierto, ejecutado localmente con FastEmbed). Es el modelo fijado en `rag_ejemplo.py`.
 
-**Justificación:**
-* **Precisión y Multilingüismo:** Ambos modelos destacan en la captura de matices semánticos en español, fundamental para la atención al cliente de EcoMarket.
-* **Costo y Escalabilidad:** `text-embedding-3-small` de OpenAI es extremadamente económico ($0.02 por cada millón de tokens) y ofrece dimensiones ajustables (1536 dimensiones por defecto), reduciendo almacenamiento sin perder precisión.
-* **Propietario vs. Open Source:** 
-  * *OpenAI (`text-embedding-3-small`):* Modelo propietario que no requiere infraestructura dedicada ni mantenimiento de GPUs.
-  * *HuggingFace / FastEmbed (`multilingual-e5-base`):* Modelos de código abierto ideales si EcoMarket requiere privacidad total y ejecución on-premise sin costo de suscripción por token.
+| Criterio | `intfloat/multilingual-e5-large` (elegido) | `text-embedding-3-small` (OpenAI) | `BAAI/bge-small-en-v1.5` (default de FastEmbed) |
+| :--- | :--- | :--- | :--- |
+| Tipo | Open source | Propietario (API) | Open source |
+| Idioma español | Excelente (multilingüe, ~100 idiomas) | Muy bueno | Deficiente (optimizado para inglés) |
+| Costo | Gratis (solo cómputo local) | ~$0.02 por millón de tokens | Gratis |
+| Privacidad | Datos no salen del equipo | Datos enviados a terceros | Datos no salen del equipo |
+| Infraestructura | CPU/RAM local (~2 GB de modelo) | Ninguna, requiere API Key | CPU local (muy ligero) |
+| Latencia | Media (inferencia local) | Dependiente de red | Baja |
 
----
+**Justificación:** EcoMarket atiende clientes en español, por lo que descartamos el modelo por defecto de FastEmbed (entrenado para inglés). Entre un modelo propietario y uno abierto elegimos el abierto porque no genera costo por token, evita enviar datos de pedidos y clientes (información personal) a terceros y no requiere una API Key adicional. Su desventaja es el mayor consumo de memoria y la primera descarga (~2 GB).
 
 ### 2. Base de Datos Vectorial
-**Selección:** `ChromaDB` (Entorno de Desarrollo/Prototipado) con visión a `Qdrant` / `Pinecone` (Producción).
+**Selección:** `ChromaDB` (prototipado) con ruta de migración a `Qdrant` o `Pinecone` (producción).
 
-**Justificación y Comparativa:**
-* **ChromaDB:** Base de datos vectorial de código abierto, embebida y liviana. Se integra nativamente con LangChain/LlamaIndex sin costo de infraestructura, ideal para el prototipo de EcoMarket.
-* **Pinecone:** Servicio SaaS completamente administrado en la nube. Excelente escalabilidad pero genera costo continuo y dependencia de terceros.
-* **Weaviate / Qdrant:** Ofrecen búsqueda híbrida (vectorial + palabras clave BM25), altamente recomendadas si EcoMarket crece a miles de productos.
+| Criterio | ChromaDB (elegido) | Pinecone | Weaviate / Qdrant |
+| :--- | :--- | :--- | :--- |
+| Despliegue | Embebida en Python, sin servidor | SaaS administrado | Servidor propio o nube |
+| Costo | Gratis | Plan gratuito limitado, luego pago continuo | Gratis (self-hosted) o pago (cloud) |
+| Escalabilidad | Baja/media (un nodo) | Muy alta | Alta |
+| Búsqueda híbrida (vectorial + palabras clave) | Limitada | Disponible | Nativa |
+| Integración LangChain | Nativa | Nativa | Nativa |
+| Dependencia de terceros | Ninguna | Alta | Media |
+
+**Justificación:** el catálogo de EcoMarket para este prototipo es pequeño; ChromaDB ofrece configuración inmediata y costo cero. Si el catálogo y el volumen de consultas crecen, se migraría a Qdrant/Weaviate para búsqueda híbrida (útil para números de guía como `ECO-1003`, que una búsqueda puramente semántica puede confundir) o a Pinecone si se prefiere un servicio administrado.
+
+### 3. LLM de Generación
+**Selección:** Llama 3 vía API de **Groq** (`llama-3.3-70b-versatile` con respaldo `llama-3.1-8b-instant`), el mismo proveedor usado en el Taller 1, con `temperature=0` para respuestas deterministas y apegadas al contexto.
 
 ---
 
 ## Fase 2: Creación de la Base de Conocimiento de Documentos
 
-### 1. Documentos Seleccionados (Base de Conocimiento)
-Para atender las solicitudes de los clientes de EcoMarket, se identificaron 3 tipos de fuentes clave en la carpeta `docs/`:
-1. **`politica_devoluciones.txt` (Documento No Estructurado):** Contiene reglas de garantías, devoluciones, plazos y condiciones de envíos ecológicos.
-2. **`inventario_productos.json` (Documento Estructurado):** Catálogo con IDs, nombres de productos ecológicos, stock, precios y categorías.
-3. **`preguntas_frecuentes.json` (Documento Semi-estructurado):** Pares de Pregunta-Respuesta sobre sostenibilidad, empaques biodegradables y métodos de pago.
+### 1. Documentos Seleccionados (carpeta `docs/`)
+| Documento | Tipo | Contenido |
+| :--- | :--- | :--- |
+| `politica_devoluciones.txt` | No estructurado | Política **unificada**: 30 días para productos estándar, sin devolución para higiene personal y perecederos, alternativas (bono/nota de crédito), costos de envío y reembolsos. |
+| `inventario_productos.json` | Estructurado | Productos, precios, stock, categoría y si admiten devolución. |
+| `preguntas_frecuentes.json` | Semi-estructurado | Preguntas y respuestas sobre empaques, pagos y envíos rurales. |
+| `mock_orders.json` | Estructurado (Taller 1) | 10 pedidos con número de guía, estado, fecha estimada y enlace de rastreo. |
 
----
+**Unificación de la política:** las reglas del Taller 1 (higiene personal y perecederos no se devuelven; los productos sostenibles estándar sí dentro de 30 días; se ofrecen bonos o notas de crédito) se integraron en `politica_devoluciones.txt` y se reflejan en el inventario (el cepillo de bambú figura como *Higiene personal* y `admite_devolucion: false`), de modo que no existan reglas contradictorias.
 
 ### 2. Estrategia de Segmentación (Chunking)
-* **Estrategia Elegida:** *RecursiveCharacterTextSplitter* (Segmentación por caracteres recursiva).
-* **Parámetros:** `chunk_size=300` caracteres, `chunk_overlap=50` caracteres.
-* **Justificación:**
-  * La división recursiva respeta la estructura natural del lenguaje (párrafos `\n\n`, frases `\n`, espacios `" "`), evitando cortar frases a la mitad.
-  * El solapamiento (*overlap*) de 50 caracteres preserva el contexto entre fragmentos contiguos, evitando que información relevante en los límites quede aislada.
+| Estrategia | Ventaja | Desventaja | Uso en el proyecto |
+| :--- | :--- | :--- | :--- |
+| Tamaño fijo | Simple y predecible | Corta frases a la mitad | Descartada |
+| **Recursiva por separadores** | Respeta párrafos y frases | Tamaño variable | **Elegida** |
+| Semántica (por embeddings) | Cortes por cambio de tema | Mayor costo de cómputo | Mejora futura |
 
----
+* **Parámetros:** `chunk_size=300`, `chunk_overlap=50`, separadores `["\n\n", "\n", ". ", " "]`.
+* **Justificación:** con 300 caracteres cada chunk representa una idea completa (una cláusula de política, un producto o un pedido) y el vector no se diluye en varios temas. El solapamiento de 50 caracteres (~17 %) evita perder contexto en los bordes. Los documentos JSON se convierten a una frase por registro antes de segmentar, por lo que cada producto o pedido queda en un chunk propio.
 
 ### 3. Proceso de Indexación
-1. **Carga (Loading):** Se leen los archivos de la carpeta `docs/`.
-2. **Fragmentación (Splitting):** Se aplica el *Chunking* recursivo.
-3. **Vectorización (Embedding):** Cada chunk se pasa por el modelo de embeddings para generar un vector representativo.
-4. **Almacenamiento (Indexing):** Los vectores y sus metadatos (origen, categoría) se insertan en ChromaDB.
+1. **Carga:** se leen los 4 archivos de `docs/` (17 documentos base).
+2. **Fragmentación:** `RecursiveCharacterTextSplitter` genera 25 chunks.
+3. **Vectorización:** cada chunk pasa por `multilingual-e5-large`.
+4. **Almacenamiento:** vectores y metadatos (`fuente`, `id`) se insertan en ChromaDB.
 
 ---
 
 ## Fase 3: Integración y Ejecución de Código
 
-El script ejecutable se encuentra en `rag_ejemplo.py`.
+Archivos principales:
+* `rag_ejemplo.py`: sistema RAG completo (recuperación + prompt + LLM Groq).
+* `evaluacion_metricas.py`: métricas de recuperación (Hit Rate@K, latencia) y gráfico `metricas_rag.png`.
 
-### Limitaciones y Suposiciones:
-1. **Recursos de Cómputo:** Se utiliza un modelo de embeddings ligero local para garantizar la ejecución fluida en entornos locales sin depender de claves API de pago.
-2. **Escalabilidad Vectorial:** ChromaDB en modo embebido es óptimo para prototipos; para un entorno de producción con millones de registros se asumiría la migración a un clúster de Qdrant o Pinecone.
+### Prompt de generación (restringido al contexto)
+El prompt asigna el rol de agente de EcoMarket, ordena responder **solo** con el `[CONTEXTO]`, exige la frase `No tengo esa información.` cuando el contexto no alcanza, y conserva las reglas del Taller 1 (disculpa en pedidos retrasados con fecha y enlace; empatía y alternativas cuando un producto no admite devolución).
+
+### Experimento antes / después
+Se evaluó el impacto de variar los hiperparámetros de `chunk_size` y `k` sobre el banco de 6 preguntas de prueba (políticas, productos, pagos, pedido `ECO-1003` y regla de higiene):
+
+| Configuración | chunk_size | overlap | k | Hit Rate |
+| :--- | :---: | :---: | :---: | :---: |
+| Antes | 100 | 20 | 1 | **66.7 %** |
+| Después | 300 | 50 | 3 | **100.0 %** |
+
+**Análisis:** con chunks de 100 caracteres y un solo fragmento recuperado, la información queda cortada o el fragmento correcto no ocupa el primer puesto, y fallan 2 de 6 preguntas. Con 300 caracteres el chunk conserva la idea completa y con `k=3` aumenta la probabilidad de incluir el fragmento correcto, alcanzando 100 %.
+
+### Prueba dentro de dominio y fuera de dominio
+`rag_ejemplo.py` ejecuta ambas pruebas al correr el script:
+
+| Tipo | Pregunta | Comportamiento esperado |
+| :--- | :--- | :--- |
+| Dentro de dominio | "¿Cuál es el estado de mi pedido ECO-1003?" | Recupera el pedido (estado *Retrasado*), el LLM se disculpa e informa fecha estimada y enlace de rastreo. |
+| Dentro de dominio | "¿Puedo devolver un cepillo de bambú que ya abrí?" | Recupera la regla de higiene; el LLM explica que no procede y ofrece bono o nota de crédito. |
+| Fuera de dominio | "¿Cuál es el precio del Bitcoin hoy?" | Ningún fragmento es relevante; el LLM responde `No tengo esa información.` |
+
+> Las respuestas del LLM dependen de la `GROQ_API_KEY` y del modelo activo en Groq; la etapa de recuperación se puede verificar sin clave con `evaluacion_metricas.py`.
+
+### Limitaciones y Suposiciones
+1. **Calidad del contexto:** el LLM solo es tan bueno como los fragmentos recuperados; si la recuperación falla, la respuesta será `No tengo esa información.` o incompleta. Por eso se mide el Hit Rate.
+2. **Números de guía:** la búsqueda semántica no es exacta para identificadores como `ECO-1003`. Con pocos pedidos funciona, pero en producción convendría búsqueda híbrida (palabras clave + vectores) o consulta directa a la base de datos.
+3. **Datos simulados:** pedidos, inventario y políticas son ficticios (`mock_orders.json`); un sistema real requeriría sincronización en tiempo real con la base transaccional.
+4. **Prefijos de E5:** el modelo E5 recomienda anteponer `query:` y `passage:` a los textos; la integración de FastEmbed con LangChain no lo hace de forma automática, lo que podría mejorar marginalmente la precisión.
+5. **Recursos y dependencias:** `multilingual-e5-large` requiere ~2 GB de descarga y memoria. Se fija `onnxruntime<1.23` porque versiones recientes rechazan la carga de este modelo desde la caché de FastEmbed.
+6. **Dependencia externa:** la generación requiere conexión y clave de Groq; está sujeta a cuotas (*rate limits*) y a cambios en los modelos disponibles (se incluye un respaldo entre modelos).
+7. **Escalabilidad:** ChromaDB embebida es adecuada para prototipos; para millones de registros o alta concurrencia se migraría a Qdrant o Pinecone.
+8. **Privacidad:** los datos de pedidos incluyen nombres de clientes; al enviar contexto a Groq se comparten con un tercero, por lo que en producción se deberían anonimizar.
+9. **Evaluación acotada:** el banco de 6 preguntas valida el prototipo, pero no reemplaza una evaluación amplia (por ejemplo con RAGAS: *faithfulness*, *context precision*).
 
 ---
 
 ## Instrucciones de Instalación y Ejecución
 
-Este proyecto utiliza **`uv`** como gestor moderno de entornos virtuales y dependencias para Python.
+Este proyecto utiliza **`uv`** como gestor de entornos virtuales y dependencias.
 
 ### Requisitos Previos
-* Python 3.10 o superior
-* `uv` instalado (`brew install uv` o `curl -LsSf https://astral.sh/uv/install.sh | sh`)
+* Python 3.10 o superior.
+* `uv` instalado (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
+* Clave gratuita de [Groq Cloud](https://console.groq.com).
 
 ### Pasos de Ejecución
 
-1. **Sincronizar el entorno virtual e instalar dependencias:**
+1. **Sincronizar el entorno e instalar dependencias:**
    ```bash
    uv sync
    ```
 
-2. **Ejecutar el sistema RAG de atención al cliente:**
+2. **Configurar la clave de Groq:**
+   ```bash
+   export GROQ_API_KEY="tu_groq_api_key_aqui"
+   ```
+
+3. **Ejecutar el sistema RAG completo (recuperación + generación):**
    ```bash
    uv run rag_ejemplo.py
    ```
 
-3. **Ejecutar la evaluación cuantitativa de métricas y generación de gráficos:**
+4. **Ejecutar la evaluación de métricas y generar el gráfico `metricas_rag.png`:**
    ```bash
    uv run evaluacion_metricas.py
    ```
-   *Nota: Este comando genera automáticamente el reporte gráfico `metricas_rag.png`.*
+
+> La primera ejecución descarga el modelo `multilingual-e5-large` (~2 GB); las siguientes usan la caché local.

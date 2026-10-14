@@ -74,10 +74,20 @@ def evaluar_sistema_rag():
             "pregunta": "¿Cuáles son los métodos de pago aceptados?",
             "palabras_clave": ["Visa", "Mastercard", "PayPal", "PSE"],
             "fuente_esperada": "Preguntas Frecuentes"
+        },
+        {
+            "pregunta": "¿Cuál es el estado de mi pedido ECO-1003?",
+            "palabras_clave": ["ECO-1003", "Retrasado"],
+            "fuente_esperada": "Pedidos"
+        },
+        {
+            "pregunta": "¿Puedo devolver un producto de higiene personal que ya abrí?",
+            "palabras_clave": ["NO admiten devolución", "higiene personal"],
+            "fuente_esperada": "Politica de Devoluciones"
         }
     ]
 
-    k = 2  # Número de fragmentos a recuperar por consulta
+    k = 3  # Número de fragmentos a recuperar por consulta
     aciertos_hit_rate = 0
     tiempos_respuesta = []
 

@@ -1,0 +1,72 @@
+[
+    {
+        "tracking_number": "ECO-1001",
+        "cliente": "Lucía Pérez",
+        "estado": "Entregado",
+        "fecha_estimada": "2026-09-15",
+        "url_rastreo": "https://ecomarket.com/track/ECO-1001"
+    },
+    {
+        "tracking_number": "ECO-1002",
+        "cliente": "Carlos Gómez",
+        "estado": "En tránsito",
+        "fecha_estimada": "2026-09-21",
+        "url_rastreo": "https://ecomarket.com/track/ECO-1002"
+    },
+    {
+        "tracking_number": "ECO-1003",
+        "cliente": "Ana María Rojas",
+        "estado": "Retrasado",
+        "fecha_estimada": "2026-09-23",
+        "url_rastreo": "https://ecomarket.com/track/ECO-1003"
+    },
+    {
+        "tracking_number": "ECO-1004",
+        "cliente": "Jorge Mario Ríos",
+        "estado": "Procesando bodega",
+        "fecha_estimada": "2026-09-25",
+        "url_rastreo": "https://ecomarket.com/track/ECO-1004"
+    },
+    {
+        "tracking_number": "ECO-1005",
+        "cliente": "Sofía Castro",
+        "estado": "Entregado",
+        "fecha_estimada": "2026-09-14",
+        "url_rastreo": "https://ecomarket.com/track/ECO-1005"
+    },
+    {
+        "tracking_number": "ECO-1006",
+        "cliente": "David Triana",
+        "estado": "En tránsito",
+        "fecha_estimada": "2026-09-22",
+        "url_rastreo": "https://ecomarket.com/track/ECO-1006"
+    },
+    {
+        "tracking_number": "ECO-1007",
+        "cliente": "Valentina Mora",
+        "estado": "Retrasado",
+        "fecha_estimada": "2026-09-24",
+        "url_rastreo": "https://ecomarket.com/track/ECO-1007"
+    },
+    {
+        "tracking_number": "ECO-1008",
+        "cliente": "Mateo Silva",
+        "estado": "Entregado",
+        "fecha_estimada": "2026-09-16",
+        "url_rastreo": "https://ecomarket.com/track/ECO-1008"
+    },
+    {
+        "tracking_number": "ECO-1009",
+        "cliente": "Camila Torres",
+        "estado": "En tránsito",
+        "fecha_estimada": "2026-09-20",
+        "url_rastreo": "https://ecomarket.com/track/ECO-1009"
+    },
+    {
+        "tracking_number": "ECO-1010",
+        "cliente": "Andrés Parra",
+        "estado": "Procesando bodega",
+        "fecha_estimada": "2026-09-26",
+        "url_rastreo": "https://ecomarket.com/track/ECO-1010"
+    }
+]
