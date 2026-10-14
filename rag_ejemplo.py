@@ -12,6 +12,12 @@ import json
 from typing import List
 
 import requests
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from langchain_community.document_loaders import TextLoader
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -140,14 +146,26 @@ def construir_prompt(pregunta: str, resultados: List[Document]) -> str:
 
 
 def consultar_llm(prompt: str) -> str:
-    """Consulta el LLM de Groq (Llama 3) con fallback entre modelos, como en el Taller 1."""
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
+    """Consulta el LLM de Groq (Llama 3) con fallback entre modelos y auto-descubrimiento."""
+    raw_api_key = os.getenv("GROQ_API_KEY")
+    if not raw_api_key:
         return "[AVISO] GROQ_API_KEY no configurada. Configure la variable de entorno para ver la respuesta generada por el LLM."
+
+    # Limpiar comillas accidentales, espacios y saltos de línea
+    api_key = raw_api_key.strip().strip("'").strip('"')
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    candidate_models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+    candidate_models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama3-70b-8192",
+        "llama3-8b-8192",
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it",
+    ]
+
+    ultimo_error = ""
 
     for model_name in candidate_models:
         payload = {
@@ -157,13 +175,47 @@ def consultar_llm(prompt: str) -> str:
             "max_tokens": 500,
         }
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
             if response.ok:
                 return response.json()["choices"][0]["message"]["content"].strip()
-        except Exception:
+            else:
+                try:
+                    err_json = response.json()
+                    err_msg = err_json.get("error", {}).get("message", response.text)
+                except Exception:
+                    err_msg = response.text
+                ultimo_error = f"Código {response.status_code}: {err_msg}"
+                if response.status_code == 401:
+                    return f"Error de autenticación con Groq (401): {err_msg}. Verifique que su GROQ_API_KEY sea válida y esté activa."
+        except Exception as e:
+            ultimo_error = str(e)
             continue
 
-    return "Error: No se pudo obtener respuesta de ningún modelo de Groq."
+    # Fallback: Auto-descubrir modelo activo de texto en Groq (como en el Taller 1)
+    try:
+        models_resp = requests.get("https://api.groq.com/openai/v1/models", headers={"Authorization": f"Bearer {api_key}"}, timeout=10)
+        if models_resp.ok:
+            available = [m['id'] for m in models_resp.json().get('data', []) if 'whisper' not in m['id'] and 'guard' not in m['id']]
+            if available:
+                payload = {
+                    "model": available[0],
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0,
+                    "max_tokens": 500
+                }
+                res = requests.post(url, headers=headers, json=payload, timeout=30)
+                if res.ok:
+                    return res.json()["choices"][0]["message"]["content"].strip()
+        else:
+            try:
+                err_msg = models_resp.json().get("error", {}).get("message", models_resp.text)
+            except Exception:
+                err_msg = models_resp.text
+            return f"Error de autenticación con Groq ({models_resp.status_code}): {err_msg}"
+    except Exception as e:
+        ultimo_error = str(e)
+
+    return f"Error al consultar Groq: {ultimo_error or 'No se pudo obtener respuesta de ningún modelo.'}"
 
 
 def responder_rag(vectorstore, pregunta: str, k: int = 3, mostrar_fragmentos: bool = True) -> str:
