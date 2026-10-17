@@ -1,7 +1,7 @@
 [project]
-name = "taller-practico-2-g1"
+name = "proyecto-final-g1"
 version = "0.1.0"
-description = "Sistema RAG para EcoMarket usando LangChain y ChromaDB"
+description = "Agente de IA con RAG para EcoMarket (LangChain, Groq, Streamlit)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,4 +14,7 @@ dependencies = [
     "matplotlib>=3.8.0",
     "onnxruntime>=1.20,<1.23",
     "requests>=2.31.0",
+    "langchain-groq>=0.2.0",
+    "streamlit>=1.35.0",
+    "python-dotenv>=1.0.0",
 ]

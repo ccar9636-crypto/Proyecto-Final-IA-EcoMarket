@@ -4,3 +4,4 @@ __pycache__/
 .env
 .DS_Store
 chroma/
+registro_acciones.log

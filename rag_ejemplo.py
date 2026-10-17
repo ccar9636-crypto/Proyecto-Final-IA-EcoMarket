@@ -60,7 +60,7 @@ def cargar_documentos() -> List[Document]:
             for item in inventario:
                 devolucion = "Admite devolucion" if item.get("admite_devolucion", True) else "NO admite devolucion"
                 contenido = (
-                    f"Producto: {item['nombre']}. Categoria: {item['categoria']}. "
+                    f"Producto ID: {item['id']}. Nombre: {item['nombre']}. Categoria: {item['categoria']}. "
                     f"Precio: ${item['precio']} USD. Stock: {item['stock']} unidades. "
                     f"{devolucion}. Descripcion: {item['descripcion']}"
                 )
@@ -79,8 +79,9 @@ def cargar_documentos() -> List[Document]:
         with open("docs/mock_orders.json", "r", encoding="utf-8") as f:
             pedidos = json.load(f)
             for p in pedidos:
+                prod_txt = f" Producto ID: {p.get('producto_id', '')}." if p.get('producto_id') else ""
                 contenido = (
-                    f"Pedido {p['tracking_number']}. Cliente: {p['cliente']}. Estado: {p['estado']}. "
+                    f"Pedido {p['tracking_number']}. Cliente: {p['cliente']}.{prod_txt} Estado: {p['estado']}. "
                     f"Fecha estimada de entrega: {p['fecha_estimada']}. Enlace de rastreo: {p['url_rastreo']}"
                 )
                 documentos.append(Document(page_content=contenido, metadata={"fuente": "Pedidos", "id": p["tracking_number"]}))
