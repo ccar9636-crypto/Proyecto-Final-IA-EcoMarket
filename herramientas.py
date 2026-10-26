@@ -15,6 +15,8 @@ from langchain_core.tools import tool
 # (los pedidos de prueba son de septiembre 2026). Se puede cambiar con FECHA_REFERENCIA.
 FECHA_REFERENCIA = os.getenv("FECHA_REFERENCIA", "2026-09-25")
 PLAZO_DIAS = 30  # Política: 30 días desde la recepción
+MOTIVOS_GRATIS = ("defectuoso", "error_ecomarket")  # EcoMarket asume el envío
+MOTIVOS_VALIDOS = (*MOTIVOS_GRATIS, "arrepentimiento")  # Arrepentimiento: el cliente paga USD 5
 
 
 def _cargar(nombre: str):
@@ -62,12 +64,17 @@ def generar_etiqueta_devolucion(tracking_number: str, producto_id: str, motivo: 
     """Genera la etiqueta de devolución. Úsala SOLO después de confirmar que el producto es elegible.
     Parámetros: tracking_number, producto_id y motivo ('defectuoso', 'error_ecomarket' o 'arrepentimiento').
     Devuelve: {'exito', 'etiqueta', 'costo_envio_usd', 'mensaje'}."""
+    motivo = motivo.strip().lower()
+    if motivo not in MOTIVOS_VALIDOS:
+        return {"exito": False, "mensaje": f"Motivo '{motivo}' no reconocido. Pide al cliente uno de: "
+                                           f"{', '.join(MOTIVOS_VALIDOS)}."}
+
     # Seguridad: la herramienta vuelve a validar, así el agente no puede saltarse la política.
     check = verificar_elegibilidad_producto.invoke({"tracking_number": tracking_number, "producto_id": producto_id})
     if not check["elegible"]:
         return {"exito": False, "mensaje": f"No se generó etiqueta. {check['motivo']}"}
 
-    gratis = motivo.strip().lower() in ("defectuoso", "error_ecomarket")
+    gratis = motivo in MOTIVOS_GRATIS
     etiqueta = f"DEV-{tracking_number.upper()}-{uuid.uuid4().hex[:6].upper()}"
     _registrar(etiqueta, tracking_number, producto_id, motivo)
     return {"exito": True, "etiqueta": etiqueta,
