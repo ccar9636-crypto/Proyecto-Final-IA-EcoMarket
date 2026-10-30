@@ -12,17 +12,17 @@ Ciclo: Usuario -> LLM -> ¿pide herramienta? -> se ejecuta -> resultado vuelve a
 
 import os
 
+import requests
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
+from langsmith import traceable
 
 from herramientas import HERRAMIENTAS_ACCION
 from rag_ejemplo import MENSAJE_SIN_INFORMACION, crear_sistema_rag
 
 load_dotenv()
-
-import requests
 
 MODELOS_PRIORITARIOS = [
     "openai/gpt-oss-120b",
@@ -36,10 +36,14 @@ SYSTEM_PROMPT = f"""Eres el agente de servicio al cliente de EcoMarket: amable, 
 Reglas:
 1. Para preguntas sobre políticas, productos, precios, FAQ o estado de pedidos, usa consultar_base_conocimiento.
    Responde SOLO con esa información; si no alcanza, responde exactamente: "{MENSAJE_SIN_INFORMACION}"
-2. Para devoluciones: primero llama verificar_elegibilidad_producto. Solo si es elegible, llama generar_etiqueta_devolucion.
+2. Para devoluciones: SIEMPRE llama verificar_elegibilidad_producto, incluso si la base de conocimiento ya sugiere
+   que el producto no admite devolución; la decisión final la toma esa herramienta. Solo si es elegible, llama
+   generar_etiqueta_devolucion con motivo 'defectuoso', 'error_ecomarket' o 'arrepentimiento'.
 3. Si el cliente menciona el nombre del producto (ej. "detergente", "cepillo") pero no su código PROD-xxx, usa primero consultar_base_conocimiento para averiguar el ID del producto o del pedido. Si te falta el número de pedido o el motivo, pregúntalo amablemente. Nunca inventes datos.
-4. Si no es elegible, explica el motivo con empatía y ofrece bono o nota de crédito.
+4. Si no es elegible, explica el motivo con empatía y ofrece un bono de compra o una nota de crédito, sin inventar
+   montos, porcentajes ni condiciones que no estén en la política.
 5. Si una herramienta falla, informa el problema con claridad. Saludos y charla: responde sin herramientas.
+6. Si la pregunta no tiene relación con EcoMarket, responde exactamente: "{MENSAJE_SIN_INFORMACION}"
 Responde en español, máximo dos párrafos cortos."""
 
 
@@ -66,9 +70,24 @@ def seleccionar_modelo_disponible(api_key: str) -> str:
     return MODELOS_PRIORITARIOS[0]
 
 
+def obtener_api_key() -> str:
+    """Lee GROQ_API_KEY; falla con un mensaje claro si no está configurada."""
+    api_key = os.getenv("GROQ_API_KEY", "").strip().strip("'\"")
+    if not api_key:
+        raise ValueError("No se encontró GROQ_API_KEY. Crea un archivo .env con GROQ_API_KEY=tu_clave "
+                         "(ver .env.example).")
+    return api_key
+
+
+def langsmith_activo() -> bool:
+    """Observabilidad: LangSmith traza el agente solo si LANGSMITH_TRACING=true y hay LANGSMITH_API_KEY."""
+    return os.getenv("LANGSMITH_TRACING", "").lower() == "true" and bool(os.getenv("LANGSMITH_API_KEY"))
+
+
 class AgenteEcoMarket:
-    def __init__(self):
-        self.vectorstore = crear_sistema_rag()  # Reutiliza el RAG del Taller 2
+    def __init__(self, vectorstore=None):
+        # Reutiliza el RAG del Taller 2. Se puede pasar uno ya creado para compartirlo entre sesiones.
+        self.vectorstore = vectorstore or crear_sistema_rag()
 
         @tool
         def consultar_base_conocimiento(pregunta: str) -> str:
@@ -77,13 +96,19 @@ class AgenteEcoMarket:
             return "\n\n".join(f"[{d.metadata.get('fuente')}] {d.page_content}" for d in docs)
 
         self.herramientas = {t.name: t for t in [consultar_base_conocimiento, *HERRAMIENTAS_ACCION]}
-        api_key = os.getenv("GROQ_API_KEY", "").strip().strip("'\"")
+        api_key = obtener_api_key()
         modelo_elegido = seleccionar_modelo_disponible(api_key)
         self.modelo_nombre = modelo_elegido
         llm = ChatGroq(model=modelo_elegido, temperature=0, api_key=api_key)
         self.llm = llm.bind_tools(list(self.herramientas.values()))
+        self.reiniciar()
+
+    def reiniciar(self):
+        """Borra la memoria de la conversación (conserva el modelo y la base vectorial)."""
         self.historial = [SystemMessage(content=SYSTEM_PROMPT)]
 
+    # Con LangSmith activo, cada mensaje queda como una traza con las llamadas al LLM y a las herramientas anidadas
+    @traceable(name="AgenteEcoMarket", run_type="chain")
     def responder(self, texto: str):
         """Devuelve (respuesta, lista_de_herramientas_usadas)."""
         self.historial.append(HumanMessage(content=texto))

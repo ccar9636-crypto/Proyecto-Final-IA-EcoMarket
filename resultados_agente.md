@@ -1,0 +1,13 @@
+# Resultados de la evaluación del agente
+
+Modelo: `openai/gpt-oss-120b` · Aciertos: **7/7**
+
+| Mensaje | Herramientas usadas | Respuesta del agente | ¿Correcto? |
+| :--- | :--- | :--- | :---: |
+| Hola | Ninguna | ¡Hola! Bienvenido a EcoMarket. ¿En qué puedo ayudarte hoy? | ✅ |
+| ¿Cuántos días tengo para devolver un producto? | consultar_base_conocimiento | El plazo para devolver un producto es de **30 días calendario** a partir de la fecha en que lo recibas, siempre que el artículo sea elegible según nuestra política de devoluciones. | ✅ |
+| Quiero devolver el detergente del pedido ECO-1001, llegó defectuoso | consultar_base_conocimiento → verificar_elegibilidad_producto → generar_etiqueta_devolucion | ¡Hola! He verificado que el detergente (PROD-002) del pedido ECO-1001 es elegible para devolución por estar defectuoso. Aquí tienes la etiqueta de devolución: **DEV‑ECO‑1001‑4A1746**. El envío es gratuito y, una vez recibida e inspeccionada la unidad, el reembolso se procesará en 5‑8 días hábiles. Si necesitas ayuda adicional, estoy a tu disposición. | ✅ |
+| Quiero devolver el cepillo del pedido ECO-1005 por arrepentimiento | consultar_base_conocimiento → verificar_elegibilidad_producto | Lamento informarle que el cepillo de dientes de bambú (PROD‑001) no es elegible para devolución, ya que la normativa de salud impide devolver productos de higiene personal. Entiendo su molestia y, como alternativa, podemos ofrecerle un bono de compra o una nota de crédito para su próxima adquisición. ¿Le gustaría que proceda con alguna de estas opciones? | ✅ |
+| Quiero devolver la botella del pedido ECO-1008, no me gustó | consultar_base_conocimiento → verificar_elegibilidad_producto | Lamento mucho que la botella no haya sido de tu agrado. Según nuestra política, el plazo máximo para devoluciones es de 30 días después de la entrega y ya han transcurrido 55 días, por lo que este producto no es elegible para devolución.  Entiendo lo frustrante que puede ser, así que me gustaría ofrecerte un bono de compra para tu próxima orden como agradecimiento por tu comprensión. Si deseas usarlo o tienes alguna otra consulta, estaré encantado de ayudarte. | ✅ |
+| Quiero devolver algo | Ninguna | ¡Hola! Claro, con gusto le ayudo con la devolución. ¿Podría indicarme el nombre o código del producto que desea devolver y el número de seguimiento de su pedido (por ejemplo, ECO‑1001)? También sería útil saber el motivo de la devolución (defectuoso, error de EcoMarket o arrepentimiento). Con esos datos podré verificar la elegibilidad y generar la etiqueta correspondiente. | ✅ |
+| ¿Cuál es el precio del Bitcoin hoy? | Ninguna | No tengo esa información. | ✅ |
