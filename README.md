@@ -146,8 +146,3 @@ uv run evaluar_agente.py                  # (opcional) evaluación del comportam
 uv run agente.py                          # (opcional) pruebas por consola
 ```
 La primera ejecución descarga el modelo de embeddings (~2 GB).
-
-## Guion sugerido para el video (≤10 min)
-1. **Fase 1 (2-3 min):** las 3 herramientas, por qué LangChain y el diagrama de flujo.
-2. **Fase 2 (3-4 min):** `herramientas.py` → `agente.py` (ciclo de decisión) → manejo de errores.
-3. **Fase 4 (3-4 min):** correr Streamlit y probar los mensajes de la tabla de pruebas.
